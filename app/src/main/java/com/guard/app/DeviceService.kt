@@ -13,7 +13,6 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.app.usage.UsageStatsManager
-import android.content.pm.ApplicationInfo
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.*
 import org.json.JSONArray

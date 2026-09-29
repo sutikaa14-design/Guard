@@ -162,8 +162,8 @@ class MainActivity : AppCompatActivity() {
         screen("Setup Perlindungan Anak","Semua izin Android dilakukan secara terbuka. Tidak ada kamera/mikrofon tersembunyi.")
         val fine=ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED
         root.addView(label("Lokasi: "+if(fine)"✓ aktif" else "belum aktif"))
-        root.addView(btn("Izinkan lokasi"){if(!fine)ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION),22)else openSettings()})
-        root.addView(btn("Buka pengaturan lokasi GUARD"){openSettings()})
+        root.addView(btn("Izinkan lokasi"){if(!fine)ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION),22)else requestBackgroundLocation()})
+        root.addView(btn("Izinkan lokasi saat GUARD berjalan di latar"){requestBackgroundLocation()})
         val usage=try{val op=getSystemService(APP_OPS_SERVICE) as android.app.AppOpsManager;op.checkOpNoThrow("android:get_usage_stats",android.os.Process.myUid(),packageName)==android.app.AppOpsManager.MODE_ALLOWED}catch(_:Exception){false}
         root.addView(label("Penggunaan aplikasi: "+if(usage)"✓ aktif" else "belum aktif"))
         root.addView(btn("Aktifkan Akses Penggunaan Aplikasi"){startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))})
@@ -180,6 +180,16 @@ class MainActivity : AppCompatActivity() {
         val s=Settings.Secure.getString(contentResolver,Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)?:return false
         return s.split(':').any{it.contains("GuardAccessibilityService",true)}
     }
+    private fun requestBackgroundLocation(){
+        if(Build.VERSION.SDK_INT>=29){
+            if(ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED){
+                ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION),22)
+            }else if(ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_BACKGROUND_LOCATION)!=PackageManager.PERMISSION_GRANTED){
+                ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION),23)
+            }else startService()
+        }else startService()
+    }
+
     private fun startService(){
         if(ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED){
             ContextCompat.startForegroundService(this,Intent(this,DeviceService::class.java));toast("GUARD aktif")
@@ -253,5 +263,5 @@ class MainActivity : AppCompatActivity() {
         screen("Tambah Zona Aman");val n=field("Nama zona");val la=field("Latitude");val lo=field("Longitude");val ra=field("Radius meter");ra.setText("200");listOf(n,la,lo,ra).forEach(root::addView)
         root.addView(btn("Simpan"){request({api.createGeofence(id,n.text.toString(),la.text.toString().toDouble(),lo.text.toString().toDouble(),ra.text.toString().toDouble())}){geofences(id,name)}});root.addView(btn("Batal"){geofences(id,name)})
     }
-    override fun onRequestPermissionsResult(c:Int,p:Array<out String>,r:IntArray){super.onRequestPermissionsResult(c,p,r);if(c==22&&r.any{it==PackageManager.PERMISSION_GRANTED})startService()}
+    override fun onRequestPermissionsResult(c:Int,p:Array<out String>,r:IntArray){super.onRequestPermissionsResult(c,p,r);if(c==22&&r.any{it==PackageManager.PERMISSION_GRANTED})requestBackgroundLocation();if(c==23&&r.any{it==PackageManager.PERMISSION_GRANTED})startService()}
 }

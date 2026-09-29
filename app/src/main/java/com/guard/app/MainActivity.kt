@@ -10,6 +10,7 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.os.Build
 import android.view.Gravity
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
@@ -102,6 +103,7 @@ class MainActivity : AppCompatActivity() {
                 root.addView(label("Terakhir aktif: "+d.optString("last_seen_at","-")))
                 root.addView(btn("Pairing QR"){createPairing(cid,name)})
                 root.addView(btn("Riwayat Lokasi"){locationHistory(did,name)})
+                root.addView(btn("Riwayat Perintah"){commandHistory(did,name)})
                 root.addView(btn("Penggunaan Aplikasi"){usageHistory(did,name)})
                 root.addView(btn("Bunyikan Perangkat"){command(did,"PLAY_SOUND")})
                 root.addView(btn("Minta Lokasi Terbaru"){command(did,"LOCATE")})
@@ -149,6 +151,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun childSetup(){
+        if(Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS),24)
         screen("Setup Perlindungan Anak","Semua izin Android dilakukan secara terbuka. Tidak ada kamera/mikrofon tersembunyi.")
         val fine=ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED
         root.addView(label("Lokasi: "+if(fine)"✓ aktif" else "belum aktif"))
@@ -177,6 +180,10 @@ class MainActivity : AppCompatActivity() {
     }
     private fun openSettings(){startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+packageName)))}
     private fun command(id:String,c:String){request({api.command(id,c)}){toast("Perintah "+c+" dikirim")}}
+
+    private fun commandHistory(id:String,name:String){
+        request({api.commandHistory(id)}){r->screen("Riwayat Perintah — "+name);val a=r.optJSONArray("commands")?:JSONArray();if(a.length()==0)root.addView(label("Belum ada perintah."));for(i in 0 until a.length()){val x=a.getJSONObject(i);root.addView(label(x.optString("created_at")+" • "+x.optString("command")+" • "+x.optString("status")))};root.addView(btn("Kembali"){dashboard()})
+    }
 
     private fun locationHistory(id:String,name:String){
         request({api.locationHistory(id)}){r->screen("Lokasi — "+name,"100 titik terakhir")

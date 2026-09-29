@@ -13,6 +13,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.app.usage.UsageStatsManager
+import android.content.pm.ApplicationInfo
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.*
 import org.json.JSONArray
@@ -67,11 +68,16 @@ class DeviceService : Service() {
     private fun collectUsage(){
         try{
             val usm=getSystemService(USAGE_STATS_SERVICE) as UsageStatsManager
-            val end=System.currentTimeMillis();val start=end-24L*60*60*1000
+            val end=System.currentTimeMillis()
+            val start=java.util.Calendar.getInstance().apply{
+                set(java.util.Calendar.HOUR_OF_DAY,0);set(java.util.Calendar.MINUTE,0);set(java.util.Calendar.SECOND,0);set(java.util.Calendar.MILLISECOND,0)
+            }.timeInMillis
             val stats=usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY,start,end)
             val apps=JSONArray();val day=SimpleDateFormat("yyyy-MM-dd",Locale.US).format(Date())
-            stats.filter{it.totalTimeInForeground>0}.forEach{
-                apps.put(JSONObject().put("package_name",it.packageName).put("app_name",it.packageName).put("usage_ms",it.totalTimeInForeground).put("usage_date",day))
+            val pm=packageManager
+            stats.filter{it.totalTimeInForeground>0 && it.packageName!=packageName}.forEach{
+                val label=try{pm.getApplicationInfo(it.packageName,0).loadLabel(pm).toString()}catch(_:Exception){it.packageName}
+                apps.put(JSONObject().put("package_name",it.packageName).put("app_name",label).put("usage_ms",it.totalTimeInForeground).put("usage_date",day))
             }
             if(apps.length()>0)api.usage(apps)
         }catch(_:SecurityException){}catch(_:Exception){}

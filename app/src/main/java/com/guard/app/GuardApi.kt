@@ -102,6 +102,8 @@ class GuardApi(context: Context) {
             .put("day_of_week",day).put("start_minute",start ?: JSONObject.NULL)
             .put("end_minute",end ?: JSONObject.NULL).put("limit_minutes",limit ?: JSONObject.NULL))
 
+    fun commandHistory(deviceId: String) = post(JSONObject().put("action","command_history").put("device_id",deviceId))
+
     fun locationHistory(deviceId: String) =
         post(JSONObject().put("action","location_history").put("device_id",deviceId))
 

@@ -14,11 +14,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.app.usage.UsageStatsManager
 import androidx.core.app.NotificationCompat
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationCallback
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationResult
-import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.*
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -28,155 +24,89 @@ import java.util.Locale
 class DeviceService : Service() {
     private lateinit var api: GuardApi
     private lateinit var locationClient: FusedLocationProviderClient
-    private val handler = Handler(Looper.getMainLooper())
-    private lateinit var locationCallback: LocationCallback
+    private val handler=Handler(Looper.getMainLooper())
+    private lateinit var callback:LocationCallback
+    private var polling=false
 
-    override fun onCreate() {
+    override fun onCreate(){
         super.onCreate()
-        api = GuardApi(this)
-        locationClient = LocationServices.getFusedLocationProviderClient(this)
-
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
-            NotificationChannel("guard", "GUARD", NotificationManager.IMPORTANCE_LOW)
-        )
-
-        startForeground(
-            7,
-            NotificationCompat.Builder(this, "guard")
-                .setContentTitle("GUARD aktif")
-                .setContentText("Perlindungan perangkat anak berjalan")
-                .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
-                .setOngoing(true)
-                .build()
-        )
-
+        api=GuardApi(this)
+        if(api.deviceToken==null){stopSelf();return}
+        locationClient=LocationServices.getFusedLocationProviderClient(this)
+        val nm=getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(NotificationChannel("guard","GUARD",NotificationManager.IMPORTANCE_LOW))
+        startForeground(7,NotificationCompat.Builder(this,"guard")
+            .setContentTitle("GUARD aktif").setContentText("Perlindungan perangkat anak sedang berjalan")
+            .setSmallIcon(android.R.drawable.ic_lock_idle_lock).setOngoing(true).build())
+        sendHeartbeat()
         collectUsage()
-        handler.postDelayed(usageRunnable, 15 * 60 * 1000L)
-        requestLocationUpdates()
+        handler.postDelayed(usageTask,15*60*1000L)
+        requestLocations()
         pollCommands()
     }
 
-    private val usageRunnable = object : Runnable {
-        override fun run() {
-            collectUsage()
-            handler.postDelayed(this, 15 * 60 * 1000L)
+    private val usageTask=object:Runnable{override fun run(){collectUsage();handler.postDelayed(this,15*60*1000L)}}
+
+    private fun requestLocations(){
+        callback=object:LocationCallback(){
+            override fun onLocationResult(r:LocationResult){r.locations.lastOrNull()?.let{sendLocation(it)}}
         }
+        try{
+            val req=LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY,60_000L).setMinUpdateIntervalMillis(30_000L).setWaitForAccurateLocation(false).build()
+            locationClient.requestLocationUpdates(req,callback,mainLooper)
+        }catch(_:SecurityException){}
     }
 
-    private fun requestLocationUpdates() {
-        locationCallback = object : LocationCallback() {
-            override fun onLocationResult(result: LocationResult) {
-                result.locations.lastOrNull()?.let(::sendLocation)
+    private fun battery():Int{
+        val b=(getSystemService(BATTERY_SERVICE) as BatteryManager).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        return if(b in 0..100)b else 0
+    }
+    private fun sendHeartbeat(){Thread{try{api.heartbeat(battery())}catch(_:Exception){}}.start()}
+    private fun sendLocation(l:Location){Thread{try{api.location(l.latitude,l.longitude,l.accuracy);api.heartbeat(battery())}catch(_:Exception){}}.start()}
+
+    private fun collectUsage(){
+        try{
+            val usm=getSystemService(USAGE_STATS_SERVICE) as UsageStatsManager
+            val end=System.currentTimeMillis();val start=end-24L*60*60*1000
+            val stats=usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY,start,end)
+            val apps=JSONArray();val day=SimpleDateFormat("yyyy-MM-dd",Locale.US).format(Date())
+            stats.filter{it.totalTimeInForeground>0}.forEach{
+                apps.put(JSONObject().put("package_name",it.packageName).put("app_name",it.packageName).put("usage_ms",it.totalTimeInForeground).put("usage_date",day))
             }
-        }
-        try {
-            val request = LocationRequest.create()
-                .setPriority(LocationRequest.PRIORITY_BALANCED_POWER_ACCURACY)
-                .setInterval(60_000L)
-                .setFastestInterval(30_000L)
-            locationClient.requestLocationUpdates(request, locationCallback, mainLooper)
-        } catch (_: SecurityException) {
-            // Permission is requested by the child enrollment UI.
-        }
+            if(apps.length()>0)api.usage(apps)
+        }catch(_:SecurityException){}catch(_:Exception){}
     }
 
-    private fun sendLocation(location: Location) {
-        Thread {
-            try {
-                api.location(location.latitude, location.longitude, location.accuracy)
-                val battery = (getSystemService(BATTERY_SERVICE) as BatteryManager)
-                    .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-                api.heartbeat(battery)
-            } catch (_: Exception) {
-            }
-        }.start()
-    }
-
-    private fun collectUsage() {
-        try {
-            val usage = getSystemService(USAGE_STATS_SERVICE) as UsageStatsManager
-            val end = System.currentTimeMillis()
-            val start = end - 24L * 60L * 60L * 1000L
-            val stats = usage.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, end)
-            val apps = JSONArray()
-            val day = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-            stats.filter { it.totalTimeInForeground > 0L }.forEach {
-                apps.put(
-                    JSONObject()
-                        .put("package_name", it.packageName)
-                        .put("usage_ms", it.totalTimeInForeground)
-                        .put("usage_date", day)
-                )
-            }
-            if (apps.length() > 0) api.usage(apps)
-        } catch (_: Exception) {
-        }
-    }
-
-    private fun pollCommands() {
-        handler.postDelayed({
-            Thread {
-                try {
-                    val commands = api.commands().optJSONArray("commands")
-                    if (commands != null) {
-                        for (i in 0 until commands.length()) {
-                            val command = commands.getJSONObject(i)
-                            val success = executeCommand(command.optString("command"))
-                            api.complete(command.getString("id"), success)
+    private fun pollCommands(){
+        if(polling)return
+        polling=true
+        handler.post(object:Runnable{
+            override fun run(){
+                Thread{
+                    try{
+                        val arr=api.commands().optJSONArray("commands")
+                        if(arr!=null)for(i in 0 until arr.length()){
+                            val c=arr.getJSONObject(i);val ok=execute(c.optString("command"));api.complete(c.getString("id"),ok)
                         }
-                    }
-                } catch (_: Exception) {
-                }
-            }.start()
-            pollCommands()
-        }, 15_000L)
+                    }catch(_:Exception){}
+                }.start()
+                handler.postDelayed(this,15_000L)
+            }
+        })
     }
 
-    private fun executeCommand(command: String): Boolean {
-        return when (command) {
-            "PLAY_SOUND" -> {
-                val audio = getSystemService(AUDIO_SERVICE) as AudioManager
-                audio.setStreamVolume(
-                    AudioManager.STREAM_RING,
-                    audio.getStreamMaxVolume(AudioManager.STREAM_RING),
-                    0
-                )
-                true
-            }
-            "LOCATE", "SYNC_STATUS" -> {
-                try {
-                    locationClient.lastLocation.addOnSuccessListener { it?.let(::sendLocation) }
-                } catch (_: Exception) {
-                }
-                true
-            }
-            "LOCK" -> {
-                val policy = getSystemService(DEVICE_POLICY_SERVICE) as DevicePolicyManager
-                val admin = ComponentName(this, GuardAdminReceiver::class.java)
-                if (policy.isAdminActive(admin)) {
-                    policy.lockNow()
-                    true
-                } else {
-                    false
-                }
-            }
-            else -> false
-        }
+    private fun execute(c:String):Boolean=when(c){
+        "PLAY_SOUND"->{try{val a=getSystemService(AUDIO_SERVICE) as AudioManager;a.setStreamVolume(AudioManager.STREAM_RING,a.getStreamMaxVolume(AudioManager.STREAM_RING),0);true}catch(_:Exception){false}}
+        "LOCATE","SYNC_STATUS"->{try{locationClient.lastLocation.addOnSuccessListener{it?.let(::sendLocation)};true}catch(_:Exception){false}}
+        "LOCK"->{try{val d=getSystemService(DEVICE_POLICY_SERVICE) as DevicePolicyManager;val n=ComponentName(this,GuardAdminReceiver::class.java);if(d.isAdminActive(n)){d.lockNow();true}else false}catch(_:Exception){false}}
+        else->false
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
-
-    override fun onBind(intent: Intent?): IBinder? = null
-
-    override fun onDestroy() {
+    override fun onStartCommand(intent:Intent?,flags:Int,startId:Int)=START_STICKY
+    override fun onBind(intent:Intent?):IBinder?=null
+    override fun onDestroy(){
         handler.removeCallbacksAndMessages(null)
-        if (::locationCallback.isInitialized) {
-            try {
-                locationClient.removeLocationUpdates(locationCallback)
-            } catch (_: Exception) {
-            }
-        }
+        if(::callback.isInitialized)try{locationClient.removeLocationUpdates(callback)}catch(_:Exception){}
         super.onDestroy()
     }
 }

@@ -16,7 +16,7 @@ import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.google.android.gms.code.scanner.GmsBarcodeScanning
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import org.json.JSONArray
@@ -182,13 +182,13 @@ class MainActivity : AppCompatActivity() {
     private fun command(id:String,c:String){request({api.command(id,c)}){toast("Perintah "+c+" dikirim")}}
 
     private fun commandHistory(id:String,name:String){
-        request({api.commandHistory(id)}){r->screen("Riwayat Perintah — "+name);val a=r.optJSONArray("commands")?:JSONArray();if(a.length()==0)root.addView(label("Belum ada perintah."));for(i in 0 until a.length()){val x=a.getJSONObject(i);root.addView(label(x.optString("created_at")+" • "+x.optString("command")+" • "+x.optString("status")))};root.addView(btn("Kembali"){dashboard()})
+        request({api.commandHistory(id)}){r->screen("Riwayat Perintah — "+name);val a=r.optJSONArray("commands")?:JSONArray();if(a.length()==0)root.addView(label("Belum ada perintah."));for(i in 0 until a.length()){val x=a.getJSONObject(i);root.addView(label(x.optString("created_at")+" • "+x.optString("command")+" • "+x.optString("status")))};root.addView(btn("Kembali"){dashboard()})}
     }
 
     private fun locationHistory(id:String,name:String){
         request({api.locationHistory(id)}){r->screen("Lokasi — "+name,"100 titik terakhir")
             val a=r.optJSONArray("locations")?:JSONArray();if(a.length()==0)root.addView(label("Belum ada riwayat."))
-            for(i in 0 until a.length()){val x=a.getJSONObject(i);root.addView(label(x.optString("recorded_at")+"\n"+x.optDouble("latitude")+", "+x.optDouble("longitude")+" • akurasi "+x.optDouble("accuracy_m",-1)+" m"))}
+            for(i in 0 until a.length()){val x=a.getJSONObject(i);root.addView(label(x.optString("recorded_at")+"\n"+x.optDouble("latitude")+", "+x.optDouble("longitude")+" • akurasi "+x.optDouble("accuracy_m",-1.0)+" m"))}
             root.addView(btn("Kembali"){dashboard()})
         }
     }

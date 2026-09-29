@@ -5,7 +5,7 @@ plugins {
 android {
     namespace = "com.guard.app"
     compileSdk = 35
-    defaultConfig {
+    compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }\n    kotlinOptions { jvmTarget = "17" }\n    defaultConfig {
         applicationId = "com.guard.app"
         minSdk = 26
         targetSdk = 35

@@ -52,6 +52,13 @@ class MainActivity : AppCompatActivity() {
     private fun toast(s:String)=Toast.makeText(this,s,Toast.LENGTH_LONG).show()
 
     private fun home(){
+        if(intent.getBooleanExtra("screen_time_blocked",false)){
+            screen("Waktu Layar Dibatasi","GUARD sedang menerapkan aturan yang dibuat orang tua.")
+            root.addView(label(intent.getStringExtra("reason") ?: "Batas waktu aktif",20f))
+            root.addView(label("Aplikasi yang dibatasi dapat digunakan kembali ketika jadwal berakhir.",16f))
+            root.addView(btn("Tutup"){finish()})
+            return
+        }
         screen("GUARD","Anak bebas. Orang tua tenang.")
         root.addView(label("Perlindungan keluarga yang transparan: lokasi, penggunaan aplikasi, waktu layar, zona aman, dan kontrol perangkat.",16f))
         root.addView(btn("Daftar Orang Tua"){register()})

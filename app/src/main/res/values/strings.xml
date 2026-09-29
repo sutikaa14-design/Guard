@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">GUARD</string>
+    <string name="accessibility_description">GUARD menggunakan aksesibilitas secara transparan untuk menerapkan aturan waktu layar yang disetujui orang tua.</string>
+</resources>

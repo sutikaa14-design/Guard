@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
+import android.widget.Toast
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -18,6 +19,7 @@ class GuardAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
     private var lastPackage = ""
     private var lastCheck = 0L
+    private var blocking = false
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -63,10 +65,12 @@ class GuardAccessibilityService : AccessibilityService() {
                 }
                 if (blocked) break
             }
-            if (blocked) {
-                val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (blocked && !blocking) {
+                blocking = true
+                val intent = Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    .putExtra("screen_time_blocked", true).putExtra("reason", reason)
                 startActivity(intent)
+                Handler(Looper.getMainLooper()).postDelayed({ blocking = false }, 1500L)
             }
         } catch (_: Exception) {}
     }
